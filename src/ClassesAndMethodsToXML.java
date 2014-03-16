@@ -1,8 +1,10 @@
 
 import com.sun.javadoc.AnnotationDesc;
 import com.sun.javadoc.ClassDoc;
+import com.sun.javadoc.DocErrorReporter;
 import com.sun.javadoc.MethodDoc;
 import com.sun.javadoc.RootDoc;
+import com.sun.tools.doclets.standard.Standard;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -23,16 +25,21 @@ import org.w3c.dom.Element;
  /*
  * @author bognix
  */
-public class ClassesAndMethodsToXML {
+public class ClassesAndMethodsToXML extends Standard {
 
 	private static HashMap<String,List<String>> methodsAndClasses;
+	private static String fileName = "classesAndMethods.xml";
 
-	public static boolean start(RootDoc root){
+	public static boolean start(RootDoc root) {
 			String annotationName = "Test";
 			methodsAndClasses = getTestMethodsAndClasses(root.classes(), annotationName);
-			buildXML(methodsAndClasses);
+			buildXML(methodsAndClasses, root.options());
 			return true;
-		}
+	}
+
+	public static boolean validOptions(String[][] options, DocErrorReporter reporter){
+		return true;
+	}
 
 	private static HashMap<String, List<String>> getTestMethodsAndClasses(
 		ClassDoc[] classes, String annotationName
@@ -65,7 +72,7 @@ public class ClassesAndMethodsToXML {
 		return interestingClasses;
 	}
 
-	private static void buildXML(HashMap<String, List<String>> input) {
+	private static void buildXML(HashMap<String, List<String>> input, String[][] options) {
 		DocumentBuilderFactory docFactory = DocumentBuilderFactory.newInstance();
 		DocumentBuilder docBuilder;
 		try {
@@ -76,10 +83,10 @@ public class ClassesAndMethodsToXML {
 		Document doc = docBuilder.newDocument();
 		Element rootClassesElement = doc.createElement("classes");
 		doc.appendChild(rootClassesElement);
-		for (String key: input.keySet()) {
+		for (String className: input.keySet()) {
 			Element classNode = doc.createElement("class");
-			classNode.appendChild(doc.createTextNode(key));
-			List<String> methods = input.get(key);
+			classNode.setAttribute("name", className);
+			List<String> methods = input.get(className);
 			Element methodsNode = doc.createElement("methods");
 			for (String method: methods) {
 				Element methodNode = doc.createElement("method");
@@ -99,14 +106,29 @@ public class ClassesAndMethodsToXML {
 			throw new RuntimeException(ex);
 		}
 		DOMSource source = new DOMSource(doc);
-		String currentDir;
-		try {
-			currentDir = new File( "." ).getCanonicalPath();
-		} catch (IOException ex) {
-			throw new RuntimeException(ex);
+
+		//Check if fileName is provided
+		String targetDir = "";
+		String targetFile = "";
+		for (int i=0; i<options.length; i++) {
+			if (options[i][0].equals("-d")) {
+				targetDir = options[i][1];
+			}
 		}
+		if (targetDir.isEmpty()) {
+			try {
+				targetDir = new File( "." ).getCanonicalPath();
+			} catch (IOException ex) {
+				throw new RuntimeException(ex);
+			}
+		}
+		if (!new File(targetDir).exists()) {
+			new File(targetDir).mkdirs();
+		}
+
+		String output = targetDir + File.separator + fileName;
 		StreamResult result = new StreamResult(
-			new File(currentDir + File.separator + "classesAndMethods.xml")
+			new File(output)
 		);
 		try {
 			transformer.transform(source, result);
@@ -114,5 +136,6 @@ public class ClassesAndMethodsToXML {
 			throw new RuntimeException(ex);
 		}
 		System.out.println("File saved!");
+		System.out.println("Location: " + output);
 	}
 }
